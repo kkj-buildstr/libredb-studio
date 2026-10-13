@@ -28,9 +28,9 @@ import {
   type AgentThreadHeader,
 } from "@/lib/agent/types";
 import { createErrorResponse } from "@/lib/api/errors";
-import { editorExecutionContext } from "@/lib/api/execution-context";
 import { createDatabaseProvider, getOrCreateProvider } from "@/lib/db";
-import { catalogSessionConnection, scopeToCatalog } from "@/lib/db/catalog-scope";
+import { catalogSessionConnection } from "@/lib/db/catalog-scope";
+import { editorProvider } from "@/lib/api/editor-provider";
 import { resolveConfig } from "@/lib/llm/utils/config";
 import { guardRoute } from "@/lib/api/require-session";
 import { getDBConfig } from "@/lib/db-ui-config";
@@ -396,8 +396,7 @@ export async function POST(req: Request) {
       );
     }
     if (catalog !== undefined) {
-      const connected = await getOrCreateProvider(connection, {}, editorExecutionContext(guard.session, connection));
-      await scopeToCatalog(connected, catalog);
+      await editorProvider(guard.session, connection, catalog);
     }
 
     /*

@@ -1329,7 +1329,8 @@ names one, and every connection string, behaves exactly as before.
   last 30 s, is never closed. All five busy answers `PoolExhaustedError` (503).
 - **The connection itself refuses** `query()`, `queryReadOnly()`, `beginTransaction()` and every
   maintenance operation but `kill` until a database is named; the API names it in a `catalog`
-  field ([`API_DOCS.md`](../API_DOCS.md)). `cancelQuery()` finds the statement in whichever session
+  field ([`API_DOCS.md`](../API_DOCS.md)), which every route resolves through `editorProvider()`
+  ([`editor-provider.ts`](../../src/lib/api/editor-provider.ts)). `cancelQuery()` finds the statement in whichever session
   runs it.
 - **The object tree chooses the database** in the workspace: activating a database, a schema, a folder
   or an object inside one makes that database the active one, and its row is drawn in bold

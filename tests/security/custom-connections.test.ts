@@ -88,6 +88,8 @@ const PROVIDER_ROUTES_OUTSIDE_DB: Record<string, string> = {
  */
 const PROVIDER_MODULES_IN_LIB: Record<string, string> = {
   "agent/runtime.ts": "drives an agent run on the seed its recorded connectionId resolves to through resolveConnection",
+  "api/editor-provider.ts":
+    "editorProvider builds for the connection its caller hands it, and every caller is a route this census reaches, which resolved it through resolveConnection first",
   "api/object-route.ts":
     "handleObjectRequest resolves through resolveConnection before it builds; every db/objects route and db/keys/scan reach it, and the census sends each of them a caller's connection",
   "mcp/context.ts": "opens only seeds that opted in with mcp: true, read from getManagedConnections",
@@ -100,8 +102,13 @@ const PROVIDER_BUILDERS = [
   "withOneShotTunnel",
 ];
 
-/** In a route, `handleObjectRequest` builds too: it is the shared body of the object routes. */
-const ROUTE_BUILDS = new RegExp(`\\b(${[...PROVIDER_BUILDERS, "handleObjectRequest"].join("|")})\\s*\\(`);
+/**
+ * In a route, `handleObjectRequest` builds too: it is the shared body of the object routes. So does
+ * `editorProvider`, which every editor route opens its provider through (#1530).
+ */
+const ROUTE_BUILDS = new RegExp(
+  `\\b(${[...PROVIDER_BUILDERS, "handleObjectRequest", "editorProvider"].join("|")})\\s*\\(`,
+);
 
 /** In src/lib, where `handleObjectRequest` is declared, only the factory's entry points count. */
 const LIB_BUILDS = new RegExp(`\\b(${PROVIDER_BUILDERS.join("|")})\\s*\\(`);

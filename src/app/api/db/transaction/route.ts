@@ -6,8 +6,8 @@ import type { BeginTransactionOptions, BeginTransactionResult, DatabaseProvider,
 import { createErrorResponse } from "@/lib/api/errors";
 import { resolveConnection } from "@/lib/seed/resolve-connection";
 import { guardRoute } from "@/lib/api/require-session";
-import { editorExecutionContext } from "@/lib/api/execution-context";
-import { requestCatalog, scopeToCatalog } from "@/lib/db/catalog-scope";
+import { requestCatalog } from "@/lib/db/catalog-scope";
+import { editorProvider } from "@/lib/api/editor-provider";
 import { readBoundParams } from "@/lib/api/bound-params";
 import { rowsWithNonFiniteWords } from "@/lib/non-finite";
 import { countCodeStatements, splitExecutionUnits, type ExecutionUnit } from "@/lib/sql/statement-splitter";
@@ -132,8 +132,7 @@ export async function POST(req: NextRequest) {
 
     // Each database of a server-level connection holds its own transaction (#1530), so ownership is per database.
     const catalog = requestCatalog(body);
-    const connected = await getOrCreateProvider(connection, {}, editorExecutionContext(guard.session, connection));
-    const provider = await scopeToCatalog(connected, catalog);
+    const provider = await editorProvider(guard.session, connection, catalog);
     const owned = transactionKey(connection.id, catalog);
 
     if (!isTransactionProvider(provider)) {

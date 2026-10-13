@@ -9,8 +9,8 @@ import { supportsQueryCancel } from "@/lib/db/query-cancel";
 import { QueryCancelledError } from "@/lib/db/errors";
 import { resolveConnection } from "@/lib/seed/resolve-connection";
 import { guardRoute } from "@/lib/api/require-session";
-import { editorExecutionContext } from "@/lib/api/execution-context";
-import { requestCatalog, scopeToCatalog } from "@/lib/db/catalog-scope";
+import { requestCatalog } from "@/lib/db/catalog-scope";
+import { editorProvider } from "@/lib/api/editor-provider";
 import { consoleTextByteLimit } from "@/lib/db/destructive-commands";
 import type { DatabaseType, QueryResult, QueryWarning } from "@/lib/types";
 import { endsOpenQueryTransactions, newQueryCallScope } from "@/lib/db/types";
@@ -217,8 +217,7 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "No valid SQL statements found" }, { status: 400 });
     }
 
-    const connected = await getOrCreateProvider(connection, {}, editorExecutionContext(guard.session, connection));
-    const provider = await scopeToCatalog(connected, requestCatalog(body));
+    const provider = await editorProvider(guard.session, connection, requestCatalog(body));
     // A request already gone, before or while the provider was acquired, starts nothing.
     if (req.signal.aborted) throw new QueryCancelledError("The query was cancelled.");
     const bound = supportsQueryCancel(provider) ? queryId : undefined;
