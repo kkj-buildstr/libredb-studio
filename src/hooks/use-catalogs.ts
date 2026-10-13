@@ -10,6 +10,8 @@ import { buildConnectionPayload } from "./use-connection-payload";
 
 /** Shown when the list fails without words of its own, as the studio's schema read says it. */
 const LIST_FAILED = "Failed to list the server's databases";
+/** An empty list is said too: the pages wait for a database, and none would ever come. */
+const NONE_LISTED = "This role can connect to no database on this server";
 
 /**
  * The databases a server-level connection lists, and the one a page reads (#1530), for the pages
@@ -39,7 +41,10 @@ export function useCatalogs(connection: DatabaseConnection | null, capabilities:
       body: JSON.stringify(buildConnectionPayload(connection)),
     })
       .then(async (res) => {
-        if (res.ok) return { catalogs: ((await res.json()) as Container[]).map((container) => container.name) };
+        if (res.ok) {
+          const catalogs = ((await res.json()) as Container[]).map((container) => container.name);
+          return catalogs.length === 0 ? { catalogs, error: NONE_LISTED } : { catalogs };
+        }
         // A refusal is shown in the route's own words, never as an empty list to wait on.
         const body = (await res.json().catch(() => ({}))) as { error?: string };
         return { catalogs: [], error: body.error || LIST_FAILED };

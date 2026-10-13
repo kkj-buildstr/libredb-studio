@@ -8,13 +8,19 @@ import { DatabaseConnection, QueryHistoryItem, SavedQuery, SchemaSnapshot, Saved
 import { type AuditEvent } from "../audit";
 import { DEFAULT_MASKING_CONFIG, type MaskingConfig } from "../data-masking";
 import { DEFAULT_THRESHOLDS, type ThresholdConfig } from "../monitoring-thresholds";
-import { readJSON, writeJSON, readString, writeString, remove, removeWorkspaceTabs } from "./local-storage";
+import {
+  activeCatalogKey,
+  readJSON,
+  writeJSON,
+  readString,
+  writeString,
+  remove,
+  removeWorkspaceTabs,
+} from "./local-storage";
 import type { ConnectionGroup, StorageCollection } from "./types";
 
 const MAX_HISTORY_ITEMS = 500;
 
-/** One server-level connection's active database (#1530): per browser, never synced. */
-const activeCatalogKey = (connectionId: string) => `active_catalog:${connectionId}`;
 const MAX_SNAPSHOTS = 50;
 const MAX_AUDIT_EVENTS = 1000;
 

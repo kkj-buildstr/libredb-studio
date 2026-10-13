@@ -206,11 +206,14 @@ const providerMetadataCalls: Array<{ id?: string } | null> = [];
 let currentCapabilities: Record<string, unknown> = mockCapabilities;
 // While true the declaration is still being read, so the dashboard knows nothing of the connection yet.
 let metadataPending = false;
+// While set, the declaration read failed with this message.
+let metadataFailure: string | null = null;
 
 mock.module("@/hooks/use-provider-metadata", () => ({
   useProviderMetadata: mock((connection: { id?: string } | null) => {
     providerMetadataCalls.push(connection);
     if (metadataPending) return { metadata: null, isLoading: true, error: null };
+    if (metadataFailure !== null) return { metadata: null, isLoading: false, error: metadataFailure };
     return {
       metadata: {
         capabilities: currentCapabilities,
@@ -725,12 +728,23 @@ describe("MonitoringDashboard on a server-level connection", () => {
     mockUseMonitoringData.mockImplementation(monitoringDataDefaults);
     currentCapabilities = mockCapabilities;
     metadataPending = false;
+    metadataFailure = null;
   });
 
   afterEach(() => {
     cleanup();
     restoreGlobalFetch();
     metadataPending = false;
+    metadataFailure = null;
+  });
+
+  test("a declaration that failed to read does not hold the page: it reads the connection as before", async () => {
+    metadataFailure = "provider-meta refused";
+    await act(async () => {
+      render(<MonitoringDashboard />);
+    });
+    await waitFor(() => expect(reads().some((read) => read.connection !== null)).toBe(true));
+    expect(reads().find((read) => read.connection !== null)?.catalog).toBeUndefined();
   });
 
   test("nothing is read while the declaration is pending, and the first read names the database", async () => {

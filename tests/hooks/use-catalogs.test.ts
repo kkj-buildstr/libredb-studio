@@ -83,6 +83,13 @@ describe("useCatalogs", () => {
     expect(unreachable.result.current.catalogs).toEqual([]);
   });
 
+  test("a list naming no database says so, rather than leaving the page waiting for one", async () => {
+    mockGlobalFetch({ "/api/db/objects/containers": databases() });
+    const empty = renderHook(() => useCatalogs(SERVER, SERVER_LEVEL));
+    await waitFor(() => expect(empty.result.current.error).toBe("This role can connect to no database on this server"));
+    expect(empty.result.current.catalog).toBeUndefined();
+  });
+
   test("a connection that names its own database lists none and asks nothing", () => {
     const fetchMock = mockGlobalFetch({});
     const pinned = renderHook(() => useCatalogs({ ...SERVER, database: "sales" }, PINNED));

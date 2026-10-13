@@ -62,6 +62,8 @@ const defaultTables = [
 // The options the tab asked for, so a test can assert that a provider whose rows
 // are derived groupings never requests tables at all (#459).
 let lastMonitoringOptions: Record<string, unknown> | undefined;
+// The declaration read's failure, when a case makes it fail.
+let mockMetadataError: string | null = null;
 // The connection and database the tab monitors, so a server-level connection's database is asserted (#1530).
 let lastMonitored: { connection: unknown; catalog?: string } | undefined;
 // Every one of them in order, so a case can assert that nothing was read before the database was known.
@@ -104,7 +106,7 @@ mock.module("@/hooks/use-monitoring-data", () => ({
 }));
 
 mock.module("@/hooks/use-provider-metadata", () => ({
-  useProviderMetadata: mock(() => ({ metadata: mockMetadata, isLoading: false, error: null })),
+  useProviderMetadata: mock(() => ({ metadata: mockMetadata, isLoading: false, error: mockMetadataError })),
 }));
 
 mock.module("@/lib/storage", () => ({
@@ -241,6 +243,7 @@ describe("OperationsTab", () => {
     lastMonitoringOptions = undefined;
     lastMonitored = undefined;
     monitoredCalls.length = 0;
+    mockMetadataError = null;
     mockCatalogs = { catalogs: [] };
     mockUseCatalogs.mockImplementation(mockedCatalogs);
     mockSetCatalog.mockClear();
@@ -3069,6 +3072,16 @@ describe("OperationsTab", () => {
     expect(lastMonitored?.catalog).toBe("analytics");
   });
 
+  test("a declaration that failed to read does not hold the tab: it monitors the connection as before", async () => {
+    mockMetadata = null;
+    mockMetadataError = "provider-meta refused";
+    await act(async () => {
+      render(<OperationsTab />);
+    });
+    expect(monitoredCalls.some((call) => call.connection !== null)).toBe(true);
+    expect(lastMonitored?.catalog).toBeUndefined();
+  });
+
   test("nothing is read while the declaration is pending, and the first read names the database", async () => {
     const serverLevel = {
       capabilities: {
@@ -3094,7 +3107,7 @@ describe("OperationsTab", () => {
     expect(monitoredCalls.find((call) => call.connection !== null)?.catalog).toBe("analytics");
   });
 
-  test("a database list the server refuses is shown, and nothing is read", async () => {
+  test("a database list the server refuses is shown, nothing is read, and Refresh lists it again", async () => {
     mockMetadata = {
       capabilities: {
         ...mockMetadata!.capabilities,
@@ -3115,6 +3128,14 @@ describe("OperationsTab", () => {
       });
       expect(await view!.findByText("permission denied to list databases")).toBeTruthy();
       expect(monitoredCalls.every((call) => call.connection === null)).toBe(true);
+
+      mockGlobalFetch({
+        "/api/db/objects/containers": { ok: true, json: [{ path: ["analytics"], name: "analytics", level: 0 }] },
+      });
+      await act(async () => {
+        fireEvent.click(view!.getByRole("button", { name: /Refresh/ }));
+      });
+      await waitFor(() => expect(lastMonitored?.catalog).toBe("analytics"));
     } finally {
       restoreGlobalFetch();
     }

@@ -308,6 +308,7 @@ export function OperationsTab() {
     catalog: storedCatalog,
     setCatalog,
     error: catalogsError,
+    retry: retryCatalogs,
   } = useCatalogs(selectedConnection, metadata?.capabilities);
   const [pickedCatalog, setPickedCatalog] = useState<string | null>(null);
   const linkedCatalog =
@@ -662,7 +663,8 @@ export function OperationsTab() {
           variant="ghost"
           size="sm"
           className="h-8 text-fg-muted hover:text-fg-secondary"
-          onClick={refresh}
+          // A refused database list holds every read, so Refresh lists the databases again (#1530).
+          onClick={catalogsError === null ? refresh : retryCatalogs}
           disabled={loading}
         >
           <RefreshCw className={`w-3.5 h-3.5 mr-1.5 ${loading ? "animate-spin" : ""}`} />
