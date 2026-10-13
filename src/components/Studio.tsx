@@ -24,6 +24,7 @@ import { DatabaseConnection, type ColumnSchema, SavedQuery } from "@/lib/types";
 import type { DatabaseObject } from "@/lib/db/types";
 import {
   activationRowActionForKind,
+  catalogOfPath,
   findKind,
   keyBrowserKind,
   kindHasSource,
@@ -45,7 +46,7 @@ import {
 import { downloadText } from "@/lib/export/download";
 import { writeToClipboard } from "@/components/copy-button";
 import { newLocalId } from "@/lib/ids";
-import { resolveAgentRunConnectionId } from "@/hooks/use-connection-payload";
+import { catalogField, resolveAgentRunConnectionId } from "@/hooks/use-connection-payload";
 import { isMobileViewport, useIsMobile } from "@/hooks/use-mobile";
 import { useAgentCapability } from "@/hooks/use-agent-capability";
 import type { AgentArtifactHydration } from "@/components/agent/hydration";
@@ -58,7 +59,7 @@ import { useConnectionOrder } from "@/hooks/use-connection-order";
 import { useConnectionGroups } from "@/hooks/use-connection-groups";
 import { useAuth } from "@/hooks/use-auth";
 import { useConnectionManager } from "@/hooks/use-connection-manager";
-import { useTabManager } from "@/hooks/use-tab-manager";
+import { type RunTabStatement, useTabManager } from "@/hooks/use-tab-manager";
 import { useTabSummaries } from "@/hooks/use-tab-summaries";
 import { useTransactionControl } from "@/hooks/use-transaction-control";
 import { useQueryExecution } from "@/hooks/use-query-execution";
@@ -155,6 +156,8 @@ export default function Studio() {
   // 4. Transaction Control
   const txn = useTransactionControl({
     activeConnection: conn.activeConnection,
+    // A BEGIN opens in a server-level connection's active database (#1530).
+    catalog: conn.activeCatalog,
   });
 
   /**
@@ -426,6 +429,7 @@ export default function Studio() {
     currentTab: tabMgr.currentTab,
     setTabs: tabMgr.setTabs,
     transactionActive: txn.transactionActive,
+    activeCatalog: conn.activeCatalog,
     playgroundMode: txn.playgroundMode,
     fetchSchema: conn.fetchSchema,
     onObjectsChanged: objectsChanged,
@@ -459,6 +463,7 @@ export default function Studio() {
     currentTab: tabMgr.currentTab,
     executeQuery: queryExec.executeQuery,
     transactionActive: txn.transactionActive,
+    activeCatalog: conn.activeCatalog,
   });
 
   // Inline row editing is offered only where the provider declares the row-update
@@ -834,7 +839,20 @@ export default function Studio() {
   const closeProfiler = useCallback(() => setProfilerPath(null), []);
   const closeCodeGen = useCallback(() => setCodeGenPath(null), []);
   const closeTestData = useCallback(() => setTestDataPath(null), []);
-  const runModalStatement = useCallback((sql: string) => queryExec.executeQuery(sql), [queryExec.executeQuery]);
+  // A modal's statement runs in its object's database (#1530); an import runs in the active one.
+  const catalogOfObject = useCallback(
+    (path: readonly string[] | null) =>
+      path === null || metadata === null ? undefined : catalogOfPath(metadata.capabilities, path),
+    [metadata],
+  );
+  const runTestData = useCallback(
+    (sql: string) => executeQuery(sql, undefined, false, catalogField(catalogOfObject(testDataPath))),
+    [executeQuery, catalogOfObject, testDataPath],
+  );
+  const runCreateTable = useCallback(
+    (sql: string) => executeQuery(sql, undefined, false, catalogField(catalogOfObject(createTableContainer))),
+    [executeQuery, catalogOfObject, createTableContainer],
+  );
   // The import dialog stays open on a failure and shows its message (#1396), so it is handed both.
   const runImport = useCallback(
     (sql: string, onFailure: (message: string) => void) => queryExec.executeQuery(sql, undefined, false, { onFailure }),
@@ -1011,17 +1029,28 @@ export default function Studio() {
         return;
       }
       const databaseOverride = database ?? undefined;
+      // An object in another database makes that one active and runs there (#1530), except during a
+      // transaction, whose database must stay active.
+      const catalog = metadata === null ? undefined : catalogOfPath(metadata.capabilities, path);
+      if (catalog !== undefined && catalog !== conn.activeCatalog && !txn.transactionActive) {
+        conn.setActiveCatalog(catalog);
+      }
+      const run: RunTabStatement =
+        catalog === undefined
+          ? queryExec.executeQuery
+          : (query, tabId, isExplain, options) =>
+              queryExec.executeQuery(query, tabId, isExplain, { ...options, catalog });
       if (databaseOverride === undefined) {
         // The third argument is passed only when there is one, so an object activation stays the
         // two-argument call its readers and its tests describe.
-        if (columns === undefined) tabMgr.handleTableClick(path, queryExec.executeQuery);
-        else tabMgr.handleTableClick(path, queryExec.executeQuery, columns);
+        if (columns === undefined) tabMgr.handleTableClick(path, run);
+        else tabMgr.handleTableClick(path, run, columns);
         return;
       }
       // A caller that knows a database knows the object's columns too, so `?? []` is only what keeps
       // the call below total: an absent set is the "nobody described this object" the key browser
       // already sends for a key no page carried.
-      tabMgr.handleTableClick(path, queryExec.executeQuery, columns ?? [], databaseOverride);
+      tabMgr.handleTableClick(path, run, columns ?? [], databaseOverride);
     },
   );
 
@@ -1251,6 +1280,7 @@ export default function Studio() {
       <AgentRail
         connectionId={agentConnectionId}
         connectionName={conn.activeConnection?.name ?? null}
+        catalog={conn.activeCatalog}
         sheetOpen={isAgentSheetOpen}
         onSheetOpenChange={setIsAgentSheetOpen}
         prefill={agentPrefill.request}
@@ -1278,6 +1308,7 @@ export default function Studio() {
     [
       agentConnectionId,
       conn.activeConnection?.name,
+      conn.activeCatalog,
       conn.activeConnection?.type,
       isAgentSheetOpen,
       agentPrefill.request,
@@ -1332,6 +1363,10 @@ export default function Studio() {
                 onLoadObjects={conn.loadObjects}
                 objectRefreshToken={objectRefreshToken}
                 connectionPulse={connectionPulse}
+                catalogs={conn.catalogs}
+                activeCatalog={conn.activeCatalog}
+                onActiveCatalogChange={conn.setActiveCatalog}
+                activeCatalogLocked={txn.transactionActive}
               />
             </ResizablePanel>
             <ResizableHandle className="w-1 bg-transparent hover:bg-brand-tint/30 transition-colors" />
@@ -1725,7 +1760,7 @@ export default function Studio() {
         showTestDataGenerator
         testDataPath={testDataPath}
         onCloseTestData={closeTestData}
-        onExecuteTestData={runModalStatement}
+        onExecuteTestData={runTestData}
         unlimitedWarningOpen={queryExec.unlimitedWarningOpen}
         onUnlimitedWarningChange={queryExec.setUnlimitedWarningOpen}
         onLoadAll={queryExec.handleUnlimitedQuery}
@@ -1745,7 +1780,7 @@ export default function Studio() {
         createTableModalOpen={isCreateTableModalOpen}
         createTableContainer={createTableContainer}
         onCloseCreateTable={closeCreateTable}
-        onTableCreated={runModalStatement}
+        onTableCreated={runCreateTable}
         pendingDeleteConnectionId={pendingDeleteConnectionId}
         onDeleteDialogOpenChange={(open) => {
           if (!open) setPendingDeleteConnectionId(null);
