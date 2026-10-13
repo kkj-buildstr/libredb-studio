@@ -16,8 +16,8 @@ interface CatalogSelectProps {
 }
 
 /**
- * The database a server-level connection reads (#1530): one select, shared by the query toolbar,
- * the sidebar and the monitoring pages, so the same choice looks the same everywhere.
+ * The database a server-level connection reads (#1530), on the monitoring pages, which have no
+ * object tree to choose it from. In the workspace the tree is where it is chosen.
  */
 export function CatalogSelect({ catalogs, value, onChange, disabled, disabledReason, className }: CatalogSelectProps) {
   if (catalogs.length === 0) return null;

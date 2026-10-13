@@ -1022,6 +1022,30 @@ export default function Studio() {
    * function after every keystroke, and every handler below that reaches the memoized sidebar
    * comes through here.
    */
+  /**
+   * Makes the database `path` sits in the active one (#1530), except during a transaction, whose
+   * database must stay active. The tree is where a server-level connection's database is chosen:
+   * activating a database, a schema, a folder or an object inside one all land here.
+   */
+  const activateCatalogOf = useStableCallback((path: readonly string[]) => {
+    const catalog = metadata === null ? undefined : catalogOfPath(metadata.capabilities, path);
+    if (catalog === undefined || catalog === conn.activeCatalog) return catalog;
+    if (txn.transactionActive) {
+      // The click changed nothing, and the row it marks may be scrolled out of view.
+      toast({
+        title: `The open transaction stays in ${conn.activeCatalog}`,
+        description: `Commit or roll it back to work in ${catalog}.`,
+      });
+    } else {
+      conn.setActiveCatalog(catalog);
+    }
+    return catalog;
+  });
+  const currentContainer = useMemo(
+    () => (conn.activeCatalog === undefined ? undefined : [conn.activeCatalog]),
+    [conn.activeCatalog],
+  );
+
   const openTabFor = useStableCallback(
     (path: readonly string[], columns?: readonly ColumnSchema[], database?: number | null) => {
       if (applyInFlight) {
@@ -1029,12 +1053,8 @@ export default function Studio() {
         return;
       }
       const databaseOverride = database ?? undefined;
-      // An object in another database makes that one active and runs there (#1530), except during a
-      // transaction, whose database must stay active.
-      const catalog = metadata === null ? undefined : catalogOfPath(metadata.capabilities, path);
-      if (catalog !== undefined && catalog !== conn.activeCatalog && !txn.transactionActive) {
-        conn.setActiveCatalog(catalog);
-      }
+      // An object in another database makes that one active and runs there (#1530).
+      const catalog = activateCatalogOf(path);
       const run: RunTabStatement =
         catalog === undefined
           ? queryExec.executeQuery
@@ -1363,10 +1383,8 @@ export default function Studio() {
                 onLoadObjects={conn.loadObjects}
                 objectRefreshToken={objectRefreshToken}
                 connectionPulse={connectionPulse}
-                catalogs={conn.catalogs}
-                activeCatalog={conn.activeCatalog}
-                onActiveCatalogChange={conn.setActiveCatalog}
-                activeCatalogLocked={txn.transactionActive}
+                currentContainer={currentContainer}
+                onContainerActivate={activateCatalogOf}
               />
             </ResizablePanel>
             <ResizableHandle className="w-1 bg-transparent hover:bg-brand-tint/30 transition-colors" />

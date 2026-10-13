@@ -3084,7 +3084,6 @@ describe("useConnectionManager on a server-level connection (#1530)", () => {
     storage.setActiveCatalog(SERVER.id, "shop");
     const { result } = renderHook(() => useConnectionManager(true));
     await readSchema(result);
-    expect(result.current.catalogs).toEqual(["analytics", "shop"]);
     expect(result.current.activeCatalog).toBe("shop");
     expect(bodies.at(-1)?.containers).toEqual([["shop", "public"]]);
     expect(result.current.defaultContainer).toEqual(["shop", "public"]);
@@ -3130,7 +3129,7 @@ describe("useConnectionManager on a server-level connection (#1530)", () => {
     await act(async () => {
       await result.current.fetchSchema(makeConnection());
     });
-    expect(result.current.catalogs).toEqual([]);
+    expect(result.current.activeCatalog).toBeUndefined();
     expect(storage.getActiveCatalog("conn-1")).toBeNull();
   });
 });

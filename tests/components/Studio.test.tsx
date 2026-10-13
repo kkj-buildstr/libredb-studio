@@ -134,7 +134,6 @@ mock.module("@/hooks/use-auth", () => ({
   })),
 }));
 
-const NO_CATALOGS: readonly string[] = [];
 const mockSetActiveCatalog = mock(() => {});
 
 mock.module("@/hooks/use-connection-manager", () => ({
@@ -146,7 +145,6 @@ mock.module("@/hooks/use-connection-manager", () => ({
     schemaContext: "[]",
     // A connection that names its own database lists none (#1530). Stable references, as the
     // hook's own are, so a keystroke hands the sidebar the props it already had.
-    catalogs: NO_CATALOGS,
     activeCatalog: undefined,
     setActiveCatalog: mockSetActiveCatalog,
     isLoadingSchema: false,
@@ -1386,7 +1384,6 @@ describe("Studio", () => {
     connMgrOverride = {
       activeConnection: pgConn,
       schema: collisionSchema,
-      catalogs: ["libredb_objects", "shop"],
       activeCatalog: "libredb_objects",
       setActiveCatalog: mockSetActiveCatalog,
     };
@@ -1414,12 +1411,42 @@ describe("Studio", () => {
     });
     expect(mockExecuteQuery).toHaveBeenLastCalledWith("INSERT 1", undefined, false, { catalog: "shop" });
 
-    // During a transaction the active database stays where it is.
+    // The tree is where the database is chosen and shown: activating a database or anything inside
+    // one makes it active, the active one again changes nothing, and its row is the current one.
+    const activate = (path: string[]) =>
+      act(() => (capturedSidebarProps.onContainerActivate as (path: readonly string[]) => void)(path));
+    expect(capturedSidebarProps.currentContainer).toEqual(["libredb_objects"]);
     mockSetActiveCatalog.mockClear();
+    activate(["shop", "dbo"]);
+    expect(mockSetActiveCatalog).toHaveBeenCalledWith("shop");
+    mockSetActiveCatalog.mockClear();
+    activate(["libredb_objects"]);
+    expect(mockSetActiveCatalog).not.toHaveBeenCalled();
+
+    // During a transaction the active database stays where it is, from the tree or from an object,
+    // and the reader is told why, since the click itself changed nothing.
     txnOverride = { transactionActive: true };
     view.rerender(<Studio />);
-    expect(capturedSidebarProps.activeCatalogLocked).toBe(true);
+    mockToast.mockClear();
+    activate(["shop"]);
     click(["shop", "dbo", "customers"]);
+    expect(mockSetActiveCatalog).not.toHaveBeenCalled();
+    expect(mockToast).toHaveBeenCalledWith({
+      title: "The open transaction stays in libredb_objects",
+      description: "Commit or roll it back to work in shop.",
+    });
+    mockToast.mockClear();
+    activate(["libredb_objects", "dbo"]);
+    expect(mockToast).not.toHaveBeenCalled();
+  });
+
+  test("a connection with no active database marks no container and moves nothing (#1530)", () => {
+    const mockSetActiveCatalog = mock((_catalog: string) => {});
+    connMgrOverride = { activeConnection: pgConn, schema: collisionSchema, setActiveCatalog: mockSetActiveCatalog };
+    render(<Studio />);
+
+    expect(capturedSidebarProps.currentContainer).toBeUndefined();
+    act(() => (capturedSidebarProps.onContainerActivate as (path: readonly string[]) => void)(["public"]));
     expect(mockSetActiveCatalog).not.toHaveBeenCalled();
   });
 

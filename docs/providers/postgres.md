@@ -1331,6 +1331,14 @@ names one, and every connection string, behaves exactly as before.
   maintenance operation but `kill` until a database is named; the API names it in a `catalog`
   field ([`API_DOCS.md`](../API_DOCS.md)). `cancelQuery()` finds the statement in whichever session
   runs it.
+- **The object tree chooses the database** in the workspace: activating a database, a schema, a folder
+  or an object inside one makes that database the active one, and its row is drawn in bold
+  (`aria-current`).
+  The editor, transactions and the agent run there.
+  While a transaction is open it stays put, and activating another database says so instead of switching.
+  There is no separate database select beside the tree.
+  The monitoring page and the operations panel have no tree, so they offer a Database select that reads
+  and writes the same remembered choice; a refused or empty database list is shown there as an error.
 
 #### `sslmode` in a pasted URL
 
@@ -2636,8 +2644,8 @@ await server.disconnect();                                 // closes every datab
 - **`blocked` on active sessions is always `false`** — lock-wait detection (`pg_locks`) is not yet
   wired in.
 - **Server-level connections are not measured on the PostgreSQL-wire relatives**, and each one can
-  hold its own pool plus 5 × 3 connections (size PgBouncer for that). The embedded shell has no
-  database picker, so there it runs nothing until a host names a database.
+  hold its own pool plus 5 × 3 connections (size PgBouncer for that). The embedded shell does not
+  choose a database from its tree, so there it runs nothing until a host names a database.
 - **Cloud SSL auto-detect does not verify the server certificate.** When SSL is enabled by host
   heuristic (`shouldEnableSSL()`), it uses `rejectUnauthorized: false` — the connection is encrypted
   but **not authenticated**, so it is exposed to man-in-the-middle attacks. For verified TLS, set an

@@ -30,9 +30,6 @@ import {
  * inlined at build time, so packaged artifacts always use the default. */
 const MANAGED_POLL_MAX_ATTEMPTS = 30;
 
-/** One array, so a render that lists no database hands out the same one. */
-const NO_CATALOGS: readonly string[] = [];
-
 /**
  * Managed-list refresh after the first load (#1502): the interval
  * never runs more often than the floor and never less often than the cap, while focus and visibility
@@ -210,10 +207,9 @@ export function useConnectionManager(storageReady = false) {
    * what happened.
    */
   const [schemaError, setSchemaError] = useState<string | null>(null);
-  /** A server-level connection's databases and the active one everything reads (#1530). */
+  /** A server-level connection's active database, the one everything reads (#1530). */
   const [catalogState, setCatalogState] = useState<{
     readonly connectionId: string;
-    readonly catalogs: readonly string[];
     readonly active?: string;
   } | null>(null);
   const [isLoadingSchema, setIsLoadingSchema] = useState(false);
@@ -310,7 +306,6 @@ export function useConnectionManager(storageReady = false) {
           if (!isCurrent()) return;
           setCatalogState({
             connectionId: conn.id,
-            catalogs: listed,
             ...(chosen === undefined ? {} : { active: chosen }),
           });
           if (chosen === undefined) {
@@ -967,9 +962,7 @@ export function useConnectionManager(storageReady = false) {
     activateFallback,
     schemaContext,
     defaultContainer,
-    // Only the active connection's (#1530): a list read for the one before it is not this one's.
-    catalogs:
-      catalogState !== null && catalogState.connectionId === visibleActive?.id ? catalogState.catalogs : NO_CATALOGS,
+    // Only the active connection's (#1530): a database chosen for the one before it is not this one's.
     activeCatalog:
       catalogState !== null && catalogState.connectionId === visibleActive?.id ? catalogState.active : undefined,
     setActiveCatalog,
